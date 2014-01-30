@@ -77,7 +77,7 @@ app = webapp2.WSGIApplication([
 * Property name customization (e.g. "myprop" will be shown as "my_fancy_prop")
 * Callback functions to be called during GET/POST/PUT/DELETE (for extra functionality/customization)
 * X-HTTP-Method-Override support
-* `CORS <https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS>` support
+* `CORS <https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS>`_ support
 * Supports any webapp2 authentication compatible mechanism
 
 ##### User Management REST API
@@ -91,8 +91,8 @@ app = webapp2.WSGIApplication([
 ## Installation
 
 1. Configure webapp2 for GAE
-2. Configure ``Jinja2 <https://developers.google.com/appengine/docs/python/gettingstartedpython27/templates>`` for GAE
-3. Include `dateutil <https://pypi.python.org/pypi/python-dateutil>` with your app (make sure `import dateutil` works)
+2. Configure ``Jinja2 <https://developers.google.com/appengine/docs/python/gettingstartedpython27/templates>``_ for GAE
+3. Include `dateutil <https://pypi.python.org/pypi/python-dateutil>`_ with your app (make sure `import dateutil` works)
 4. Drop-in the rest_gae folder
 
 ## Documentation
@@ -158,7 +158,7 @@ If the function raises an exception, the model update fails with an error (in ca
 In case of multiple deletion of models, this function will be called for each single model being deleted.
 If the function raises an exception, the model deletion fails with an error (in case of multi-delete - since there is no transaction, only the current deletion will fail and all previously-successful deletions will remain the same).
 * `allow_http_method_override` - (optional; default=True) If set, allows the user to add an HTTP request header 'X-HTTP-Method-Override' to override the request type (e.g. if the HTTP request is a POST but it also contains 'X-HTTP-Method-Override: GET', it will be treated as a GET request).
-* `allowed_origin` - (optional; default=None) If not set, CORS support is disabled. If set to '*' - allows Cross-Site HTTP requests from all domains; if set to 'http://sub.example.com' or similar - allows Cross-Site HTTP requests only from that domain. See `here <https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS>` for more information.
+* `allowed_origin` - (optional; default=None) If not set, CORS support is disabled. If set to '*' - allows Cross-Site HTTP requests from all domains; if set to 'http://sub.example.com' or similar - allows Cross-Site HTTP requests only from that domain. See `here <https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS>`_ for more information.
 
 
 #### Advanced Querying using GET Endpoint
@@ -332,4 +332,5 @@ class MyUser(User):
     class RESTMeta(User.RESTMeta):
         excluded_output_properties = User.RESTMeta.excluded_output_properties + ['prop2']
 ````
+
 
