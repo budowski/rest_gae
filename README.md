@@ -77,7 +77,7 @@ app = webapp2.WSGIApplication([
 * Property name customization (e.g. "myprop" will be shown as "my_fancy_prop")
 * Callback functions to be called during GET/POST/PUT/DELETE (for extra functionality/customization)
 * X-HTTP-Method-Override support
-* `CORS <https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS>`_ support
+* [CORS](https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS) support
 * Supports any webapp2 authentication compatible mechanism
 
 ##### User Management REST API
@@ -91,8 +91,8 @@ app = webapp2.WSGIApplication([
 ## Installation
 
 1. Configure webapp2 for GAE
-2. Configure ``Jinja2 <https://developers.google.com/appengine/docs/python/gettingstartedpython27/templates>``_ for GAE
-3. Include `dateutil <https://pypi.python.org/pypi/python-dateutil>`_ with your app (make sure `import dateutil` works)
+2. Configure [Jinja2](https://developers.google.com/appengine/docs/python/gettingstartedpython27/templates) for GAE
+3. Include [dateutil](https://pypi.python.org/pypi/python-dateutil) with your app (make sure `import dateutil` works)
 4. Drop-in the rest_gae folder
 
 ## Documentation
@@ -158,12 +158,12 @@ If the function raises an exception, the model update fails with an error (in ca
 In case of multiple deletion of models, this function will be called for each single model being deleted.
 If the function raises an exception, the model deletion fails with an error (in case of multi-delete - since there is no transaction, only the current deletion will fail and all previously-successful deletions will remain the same).
 * `allow_http_method_override` - (optional; default=True) If set, allows the user to add an HTTP request header 'X-HTTP-Method-Override' to override the request type (e.g. if the HTTP request is a POST but it also contains 'X-HTTP-Method-Override: GET', it will be treated as a GET request).
-* `allowed_origin` - (optional; default=None) If not set, CORS support is disabled. If set to '*' - allows Cross-Site HTTP requests from all domains; if set to 'http://sub.example.com' or similar - allows Cross-Site HTTP requests only from that domain. See `here <https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS>`_ for more information.
+* `allowed_origin` - (optional; default=None) If not set, CORS support is disabled. If set to '*' - allows Cross-Site HTTP requests from all domains; if set to 'http://sub.example.com' or similar - allows Cross-Site HTTP requests only from that domain. See [here](https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS) for more information.
 
 
 #### Advanced Querying using GET Endpoint
 The `GET /mymodel` endpoint queries all of the model instances (or only the logged-in user's models - in case of `PERMISSION_OWNER_USER`). The endpoint accepts the following GET arguments:
-* `q` - A GQL query. For example: `(prop1 > 300) and (prop2 < 500)`. See https://developers.google.com/appengine/docs/python/datastore/gqlreference for more info. **Note**: Make sure you URL-encode the value of this parameter (e.g. `(prop1=999) and (prop2>400)` becomes `%28prop1%3D999%29+and+%28prop2%3E400%29`).
+* `q` - A GQL query. For example: `(prop1 > 300) and (prop2 < 500)`. See [here](https://developers.google.com/appengine/docs/python/datastore/gqlreference) for more info. **Note**: Make sure you URL-encode the value of this parameter (e.g. `(prop1=999) and (prop2>400)` becomes `%28prop1%3D999%29+and+%28prop2%3E400%29`).
 * `order` - The order to sort the results by. Can be a comma-delimited list of property names. If a property name is prefixed with a minus sign, it means reverse order. For example: `prop1,-prop2,prop3`.
 * `limit` - Indicates the maximum number of results to return (default = 1000).
 
