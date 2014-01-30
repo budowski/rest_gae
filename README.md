@@ -308,8 +308,8 @@ The email is sent using GAE email services (see `send_email_callback` for using 
 * `verification_email` - (optional) Must be set if `verify_email_address` is True. A dict containing the details of the verification email being sent:
   * `sender` - The sender's email address (in the format of `John Doe <john@doe.com>`). *Must* be an authorized GAE sender (i.e. that email address must be registered as the app's developer/owner).
   * `subject` - The email's subject line
-  * `body_text` - The email's text content - a Jinja2 compatible template. Receives two input arguments: `user` and `verification_url`.
-  * `body_html` - The email's HTML content - a Jinja2 compatible template. Receives two input arguments: `user` and `verification_url`.
+  * `body_text` - The email's text content - a [Jinja2](http://jinja.pocoo.org/docs/) compatible template. Receives two input arguments: `user` and `verification_url`.
+  * `body_html` - The email's HTML content - a [Jinja2](http://jinja.pocoo.org/docs/) compatible template. Receives two input arguments: `user` and `verification_url`.
 * `verification_successful_url` - (optional) Must be set if `verify_email_address` is True. The URL that the user will be redirected to after clicking the email verification link and successfully verifying his email address.
 * `verification_failed_url` - (optional) Must be set if `verify_email_address` is True. The URL that the user will be redirected to after clicking the email verification link, while the verification failed (happens when the link is outdated or the input params are invalid).
 * `reset_password_url` - (optional) Must be set if `verify_email_address` is True. The URL that the user will be redirected to after clicking the reset password link. This page must show the user a new password form. When submitted, that page must call the `PUT /users/123` endpoint and update the password. It also has to provide that endpoint an additional `signup_token` parameter - so that we'll delete that token once the password has been set (so that the reset password link that wasn sent won't be active any more).
