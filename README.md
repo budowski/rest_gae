@@ -6,6 +6,7 @@ REST interface for NDB models over webapp2 in Google App Engine Python.
 ## About
 
 Written and maintained by Yaron Budowski. Email me at: budowski@gmail.com.
+
 A lot of authentication-related code was taken from [webapp2-user-accounts](https://github.com/abahgat/webapp2-user-accounts) by @abahgat.
 
 To be used with Apache v2 license. Though it would be nice to hear about projects using this library (email me :-D).
