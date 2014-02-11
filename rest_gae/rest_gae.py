@@ -38,7 +38,17 @@ class NDBEncoder(json.JSONEncoder):
             # Translate the property names
             obj_dict = translate_property_names(obj_dict, obj, 'output')
 
-            obj_dict['id'] = obj.key.urlsafe() # Also include the model's ID (we use urlsafe() instead of id() since we want to save the model kind as well as its ID)
+            allow_id = False
+
+            meta_class = getattr(obj, 'RESTMeta', None)
+            if meta_class:
+                allow_id = getattr(obj.RESTMeta, 'allow_id', False)
+
+            if allow_id:
+                obj_dict['id'] = obj.key.string_id()
+            else:
+                obj_dict['id'] = obj.key.urlsafe() # Also include the model's ID (we use urlsafe() instead of id() since we want to save the model kind as well as its ID)
+
 
             return obj_dict
 
@@ -46,7 +56,16 @@ class NDBEncoder(json.JSONEncoder):
             return obj.isoformat()
 
         elif isinstance(obj, ndb.Key):
-            return obj.urlsafe() # Return the referenced model ID
+            allow_id = False
+
+            meta_class = getattr(obj.kind(), 'RESTMeta', None)
+            if meta_class:
+                allow_id = getattr(meta_class, 'allow_id', False)
+
+            if allow_id:
+                return obj.string_id()
+            else:
+                return obj.urlsafe() # Return the referenced model ID
 
         else:
             return json.JSONEncoder.default(self, obj)
@@ -117,6 +136,8 @@ def get_included_properties(model, input_type):
     # Add some default excluded properties
     if input_type == 'input':
         excluded_properties.update(set(BaseRESTHandler.DEFAULT_EXCLUDED_INPUT_PROPERTIES))
+        if meta_class and getattr(meta_class, 'allow_id', False):
+            included_properties.update(['id'])
     if input_type == 'output':
         excluded_properties.update(set(BaseRESTHandler.DEFAULT_EXCLUDED_OUTPUT_PROPERTIES))
 
@@ -150,7 +171,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
     DEFAULT_MAX_QUERY_RESULTS = 1000
 
     # The names of properties that should be excluded from input/output
-    DEFAULT_EXCLUDED_INPUT_PROPERTIES = [ 'id', 'class_' ] # 'class_' is a PolyModel attribute
+    DEFAULT_EXCLUDED_INPUT_PROPERTIES = [ 'class_' ] # 'class_' is a PolyModel attribute
     DEFAULT_EXCLUDED_OUTPUT_PROPERTIES = [ ]
 
 
@@ -303,7 +324,10 @@ class BaseRESTHandler(webapp2.RequestHandler):
             return None
 
         try:
-            model = ndb.Key(urlsafe=model_id).get()
+            if getattr(self.model, 'RESTMeta', None) and getattr(self.model.RESTMeta, 'allow_id', False):
+                model = ndb.Key(self.model, model_id).get()
+            else:
+                model = ndb.Key(urlsafe=model_id).get()
             if not model: raise Exception()
         except Exception, exc:
             # Invalid key name
@@ -412,6 +436,11 @@ class BaseRESTHandler(webapp2.RequestHandler):
             else:
                 input_properties[name] = self._value_to_property(data[name], prop)
 
+        if not model and getattr(cls, 'RESTMeta', None) and getattr(cls.RESTMeta, 'allow_id', False):
+            if 'id' not in data:
+                raise RESTException('id field is required')
+            input_properties['id'] = data['id']
+
         # Filter the input properties
         included_properties = get_included_properties(cls, 'input')
         input_properties = dict((k,v) for k,v in input_properties.iteritems() if k in included_properties)
@@ -437,7 +466,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
         """Converts raw data value into an appropriate NDB property"""
 
         if isinstance(prop, ndb.KeyProperty):
-            return ndb.Key(urlsafe=value)
+            return ndb.Key(urlsafe=value) # TODO: this will fail if given an ID that was not generated with urlsafe
         elif isinstance(prop, ndb.DateTimeProperty) or isinstance(prop, ndb.TimeProperty) or isinstance(prop, ndb.DateProperty):
             # TODO - use built-in datetime if dateutil is not found
             return dateutil.parser.parse(value)
