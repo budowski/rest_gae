@@ -384,7 +384,13 @@ class BaseRESTHandler(webapp2.RequestHandler):
             # The order parameter is formatted as 'col1, -col2, col3'
             orders = [o.strip() for o in self.request.GET.get('order').split(',')]
             orders = ['+'+o if not o.startswith('-') and not o.startswith('+') else o for o in orders]
-            orders = [-getattr(self.model, o[1:]) if o[0]=='-' else getattr(self.model, o[1:]) for o in orders]
+
+            # Translate property names (if it's defined for the current model) - e.g. input 'col1' is actually 'my_col1' in MyModel
+            translated_orders = dict([order.lstrip('-+'), order[0]] for order in orders)
+            translated_orders = translate_property_names(translated_orders, self.model, 'input')
+
+            orders = [-getattr(self.model, order) if direction == '-' else getattr(self.model, order) for order,direction in translated_orders.iteritems()]
+
         except AttributeError, exc:
             # Invalid column name
             raise RESTException('Invalid "order" parameter - %s' % self.request.GET.get('order'))
