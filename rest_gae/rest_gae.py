@@ -399,23 +399,29 @@ class BaseRESTHandler(webapp2.RequestHandler):
         """Orders the query if input given by user. Returns the modified, sorted query"""
 
         if not self.request.GET.get('order'):
-            # No order given - return as-is
-            return query
+            # No order given
+            orders = []
 
-        try:
-            # The order parameter is formatted as 'col1, -col2, col3'
-            orders = [o.strip() for o in self.request.GET.get('order').split(',')]
-            orders = ['+'+o if not o.startswith('-') and not o.startswith('+') else o for o in orders]
+        else:
+            try:
+                # The order parameter is formatted as 'col1, -col2, col3'
+                orders = [o.strip() for o in self.request.GET.get('order').split(',')]
+                orders = ['+'+o if not o.startswith('-') and not o.startswith('+') else o for o in orders]
 
-            # Translate property names (if it's defined for the current model) - e.g. input 'col1' is actually 'my_col1' in MyModel
-            translated_orders = dict([order.lstrip('-+'), order[0]] for order in orders)
-            translated_orders = translate_property_names(translated_orders, self.model, 'input')
+                # Translate property names (if it's defined for the current model) - e.g. input 'col1' is actually 'my_col1' in MyModel
+                translated_orders = dict([order.lstrip('-+'), order[0]] for order in orders)
+                translated_orders = translate_property_names(translated_orders, self.model, 'input')
 
-            orders = [-getattr(self.model, order) if direction == '-' else getattr(self.model, order) for order,direction in translated_orders.iteritems()]
+                orders = [-getattr(self.model, order) if direction == '-' else getattr(self.model, order) for order,direction in translated_orders.iteritems()]
 
-        except AttributeError, exc:
-            # Invalid column name
-            raise RESTException('Invalid "order" parameter - %s' % self.request.GET.get('order'))
+            except AttributeError, exc:
+                # Invalid column name
+                raise RESTException('Invalid "order" parameter - %s' % self.request.GET.get('order'))
+
+        # Always use a sort-by-key order at the end - this solves the case where the query uses IN or != operators - since we're using a cursor
+        # to fetch results - there is a requirement for this solution in order for the fetch_page to work. See "Query cursors" at
+        # https://developers.google.com/appengine/docs/python/ndb/queries
+        orders.append(self.model.key)
 
         # Return the ordered query
         return query.order(*orders)
