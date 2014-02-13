@@ -165,7 +165,8 @@ If the function raises an exception, the model deletion fails with an error (in 
 
 #### Advanced Querying using GET Endpoint
 The `GET /mymodel` endpoint queries all of the model instances (or only the logged-in user's models - in case of `PERMISSION_OWNER_USER`). The endpoint accepts the following GET arguments:
-* `q` - A GQL query. For example: `(prop1 > 300) and (prop2 < 500)`. See [here](https://developers.google.com/appengine/docs/python/datastore/gqlreference) for more info. **Note**: Make sure you URL-encode the value of this parameter (e.g. `(prop1=999) and (prop2>400)` becomes `%28prop1%3D999%29+and+%28prop2%3E400%29`).
+* `q` - A GQL query. For example: `(prop1 > 300) and (prop2 < 500)`. See [here](https://developers.google.com/appengine/docs/python/datastore/gqlreference) for more info and limitations. **Note**: a) Make sure you URL-encode the value of this parameter (e.g. `(prop1=999) and (prop2>400)` becomes `%28prop1%3D999%29+and+%28prop2%3E400%29`). b) If using the `!=` operator in your query, make sure to use the `order` argument with the inequality property as the first order (e.g. if `q=prop1 != 300` ->
+  should use `order=prop1`).
 * `order` - The order to sort the results by. Can be a comma-delimited list of property names. If a property name is prefixed with a minus sign, it means reverse order. For example: `prop1,-prop2,prop3`.
 * `limit` - Indicates the maximum number of results to return (default = 1000).
 
