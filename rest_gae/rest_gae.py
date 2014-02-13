@@ -6,6 +6,7 @@ Some code is taken from: https://github.com/abahgat/webapp2-user-accounts
 
 import importlib
 import json
+import re
 from datetime import datetime
 from urllib import urlencode
 import webapp2
@@ -61,16 +62,28 @@ class RESTException(Exception):
 #
 
 
+def get_translation_table(model, input_type):
+    """Returns the translation table for a given `model` with a given `input_type`"""
+    meta_class = getattr(model, 'RESTMeta', None)
+    if not meta_class:
+        return {}
+
+    translation_table = getattr(model.RESTMeta, 'translate_property_names', {})
+    translation_table.update(getattr(model.RESTMeta, 'translate_%s_property_names' % input_type, {}))
+
+    return translation_table
+
+
+
 def translate_property_names(data, model, input_type):
     """Translates property names in `data` dict from one name to another, according to what is stated in `input_type` and the model's
     RESTMeta.translate_property_names/translate_input_property_names/translate_output_property_name - note that the change of `data` is in-place."""
 
-    meta_class = getattr(model, 'RESTMeta', None)
-    if not meta_class:
+    translation_table = get_translation_table(model, input_type)
+
+    if not translation_table:
         return data
 
-    translation_table = getattr(model.RESTMeta, 'translate_property_names', {})
-    translation_table.update(getattr(model.RESTMeta, 'translate_%s_property_names' % input_type, {}))
 
     # Translate from one property name to another - for output, we turn the original property names
     # into the new property names. For input, we convert back from the new property names to the original
@@ -330,7 +343,16 @@ class BaseRESTHandler(webapp2.RequestHandler):
             return self.model.query()
 
         try:
-            return self.model.gql('WHERE ' + self.request.GET.get('q'))
+            # Translate any property names
+            translation_table = get_translation_table(self.model, 'input')
+
+            query = self.request.GET.get('q')
+
+            for original_name, new_name in translation_table.iteritems():
+                # Replace any references to the new property name with the old (original) one
+                query = re.sub(r'\b%s\s*(<=|>=|=|<|>|!=|(\s+IN\s+))' % new_name, r'%s \1' % original_name, query, flags=re.IGNORECASE)
+
+            return self.model.gql('WHERE ' + query)
         except Exception, exc:
             # Invalid query
             raise RESTException('Invalid query param - "%s"' % self.request.GET.get('q'))
