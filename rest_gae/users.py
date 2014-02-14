@@ -289,7 +289,7 @@ def get_user_rest_class(**kwd):
                 # Any exceptions raised due to invalid/missing input will be caught
 
                 if self.user_policy_callback is not None:
-                    json_data = self.user_policy_callback[0](json_data)
+                    json_data = self.user_policy_callback[0](self.user, json_data)
 
                 if not 'email' in json_data:
                     raise ValueError('Missing email')
@@ -414,7 +414,7 @@ def get_user_rest_class(**kwd):
                 # Any exceptions raised due to invalid/missing input will be caught
 
                 if self.user_policy_callback is not None:
-                    self.user_policy_callback[0](json_data)
+                    self.user_policy_callback[0](self.user, json_data)
                 model = self._build_model_from_data(json_data, self.model, model)
                 if self.user.is_admin:
                     # Allow the admin to change sensitive properties
