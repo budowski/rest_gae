@@ -196,7 +196,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
 
                 if 'Origin' in self.request.headers:
                     # See if the origin matches
-                    origin = self.request.headers['origin']
+                    origin = self.request.headers['Origin']
 
                     if (origin != allowed_origin) and (allowed_origin != '*'):
                         return self.permission_denied('Origin not allowed')
