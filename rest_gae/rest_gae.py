@@ -7,7 +7,7 @@ Some code is taken from: https://github.com/abahgat/webapp2-user-accounts
 import importlib
 import json
 import re
-from datetime import datetime
+from datetime import datetime, time, date
 from urllib import urlencode
 import webapp2
 import dateutil.parser
@@ -43,7 +43,7 @@ class NDBEncoder(json.JSONEncoder):
 
             return obj_dict
 
-        elif isinstance(obj, datetime):
+        elif isinstance(obj, datetime) or isinstance(obj, date) or isinstance(obj, time):
             return obj.isoformat()
 
         elif isinstance(obj, ndb.Key):
@@ -475,15 +475,18 @@ class BaseRESTHandler(webapp2.RequestHandler):
 
         if isinstance(prop, ndb.KeyProperty):
             return ndb.Key(urlsafe=value)
-        elif isinstance(prop, ndb.DateTimeProperty) or isinstance(prop, ndb.TimeProperty) or isinstance(prop, ndb.DateProperty):
-            # TODO - use built-in datetime if dateutil is not found
+        elif isinstance(prop, ndb.TimeProperty):
+            return dateutil.parser.parse(value).time()
+        elif  isinstance(prop, ndb.DateProperty):
+            return dateutil.parser.parse(value).date()
+        elif isinstance(prop, ndb.DateTimeProperty):
             return dateutil.parser.parse(value)
-        elif isinstance(prop, ndb.StructuredProperty):
-            # It's a structured property - the input data is a dict - recursively parse it as well
-            return self._build_model_from_data(value, prop._modelclass)
         elif isinstance(prop, ndb.GeoPtProperty):
             # Convert from string (formatted as '52.37, 4.88') to GeoPt
             return ndb.GeoPt(value)
+        elif isinstance(prop, ndb.StructuredProperty):
+            # It's a structured property - the input data is a dict - recursively parse it as well
+            return self._build_model_from_data(value, prop._modelclass)
         else:
             # Return as-is (no need for further manipulation)
             return value
