@@ -34,7 +34,7 @@ def get_user_rest_class(**kwd):
         verification_failed_url = kwd.get('verification_failed_url', None)
         reset_password_url = kwd.get('reset_password_url', None)
         reset_password_email = kwd.get('reset_password_email', None)
-        password_policy_callback = kwd.get('password_policy_callback', None)
+        password_policy_callback = [kwd.get('password_policy_callback', None)]
         send_email_callback = [kwd.get('send_email_callback', None)] # Wrapping in a list so the function won't be turned into a bound method
         allow_login_for_non_verified_email = kwd.get('allow_login_for_non_verified_email', True)
 
@@ -299,7 +299,7 @@ def get_user_rest_class(**kwd):
                 password = json_data['password']
 
                 if self.password_policy_callback is not None:
-                    self.password_policy_callback(password)
+                    self.password_policy_callback[0](password)
 
                 # Sanitize the input
                 json_data.pop('user_name', None)
@@ -423,7 +423,7 @@ def get_user_rest_class(**kwd):
                 if json_data.has_key('password'):
                     # Change password if requested
                     if self.password_policy_callback is not None:
-                        self.password_policy_callback(json_data['password'])
+                        self.password_policy_callback[0](json_data['password'])
                     model.set_password(json_data['password'])
 
                 if json_data.has_key('signup_token'):
