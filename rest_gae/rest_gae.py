@@ -845,10 +845,6 @@ class RESTHandler(NamePrefixRoute): # We inherit from NamePrefixRoute so the sam
     def __init__(self, url, model, **kwd):
 
         url = url.rstrip(' /')
-        base_url, postfix = url.rstrip(' /').rsplit('/', 1)
-        if not base_url:
-            base_url = '/'
-
 
         super(RESTHandler, self).__init__(
                 'rest-handler-',
