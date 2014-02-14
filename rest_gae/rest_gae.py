@@ -30,7 +30,7 @@ class NDBEncoder(json.JSONEncoder):
     """JSON encoding for NDB models and properties"""
     def _decode_key(self, key):
             model_class = ndb.Model._kind_map.get(key.kind())
-            if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'allow_id', False):
+            if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'use_input_id', False):
                 return key.string_id()
             else:
                 return key.urlsafe()
@@ -123,7 +123,7 @@ def get_included_properties(model, input_type):
     # Add some default excluded properties
     if input_type == 'input':
         excluded_properties.update(set(BaseRESTHandler.DEFAULT_EXCLUDED_INPUT_PROPERTIES))
-        if meta_class and getattr(meta_class, 'allow_id', False):
+        if meta_class and getattr(meta_class, 'use_input_id', False):
             included_properties.update(['id'])
     if input_type == 'output':
         excluded_properties.update(set(BaseRESTHandler.DEFAULT_EXCLUDED_OUTPUT_PROPERTIES))
@@ -311,7 +311,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
             return None
 
         try:
-            if getattr(self.model, 'RESTMeta', None) and getattr(self.model.RESTMeta, 'allow_id', False):
+            if getattr(self.model, 'RESTMeta', None) and getattr(self.model.RESTMeta, 'use_input_id', False):
                 model = ndb.Key(self.model, model_id).get()
             else:
                 model = ndb.Key(urlsafe=model_id).get()
@@ -423,7 +423,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
             else:
                 input_properties[name] = self._value_to_property(data[name], prop)
 
-        if not model and getattr(cls, 'RESTMeta', None) and getattr(cls.RESTMeta, 'allow_id', False):
+        if not model and getattr(cls, 'RESTMeta', None) and getattr(cls.RESTMeta, 'use_input_id', False):
             if 'id' not in data:
                 raise RESTException('id field is required')
             input_properties['id'] = data['id']
@@ -459,7 +459,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
             except ProtocolBufferDecodeError as e:
                 if prop._kind is not None:
                     model_class = ndb.Model._kind_map.get(prop._kind)
-                    if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'allow_id', False):
+                    if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'use_input_id', False):
                         return ndb.Key(model_class, value)
             raise RESTException('invalid key: {}'.format(value) )
         elif isinstance(prop, ndb.DateTimeProperty) or isinstance(prop, ndb.TimeProperty) or isinstance(prop, ndb.DateProperty):
