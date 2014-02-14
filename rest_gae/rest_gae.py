@@ -15,6 +15,7 @@ from google.appengine.ext.ndb import Cursor
 from google.appengine.ext.db import BadValueError, BadRequestError
 from webapp2_extras import auth
 from webapp2_extras import sessions
+from google.net.proto.ProtocolBuffer import ProtocolBufferDecodeError
 
 
 # The REST permissions
@@ -27,6 +28,12 @@ PERMISSION_ADMIN = 'admin'
 
 class NDBEncoder(json.JSONEncoder):
     """JSON encoding for NDB models and properties"""
+    def _decode_key(self, key):
+            model_class = ndb.Model._kind_map.get(key.kind())
+            if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'allow_id', False):
+                return key.string_id()
+            else:
+                return key.urlsafe()
 
     def default(self, obj):
         if isinstance(obj, ndb.Model):
@@ -37,18 +44,7 @@ class NDBEncoder(json.JSONEncoder):
             obj_dict = dict((k,v) for k,v in obj_dict.iteritems() if k in included_properties)
             # Translate the property names
             obj_dict = translate_property_names(obj_dict, obj, 'output')
-
-            allow_id = False
-
-            meta_class = getattr(obj, 'RESTMeta', None)
-            if meta_class:
-                allow_id = getattr(obj.RESTMeta, 'allow_id', False)
-
-            if allow_id:
-                obj_dict['id'] = obj.key.string_id()
-            else:
-                obj_dict['id'] = obj.key.urlsafe() # Also include the model's ID (we use urlsafe() instead of id() since we want to save the model kind as well as its ID)
-
+            obj_dict['id'] = self._decode_key(obj.key)
 
             return obj_dict
 
@@ -56,16 +52,7 @@ class NDBEncoder(json.JSONEncoder):
             return obj.isoformat()
 
         elif isinstance(obj, ndb.Key):
-            allow_id = False
-
-            meta_class = getattr(obj.kind(), 'RESTMeta', None)
-            if meta_class:
-                allow_id = getattr(meta_class, 'allow_id', False)
-
-            if allow_id:
-                return obj.string_id()
-            else:
-                return obj.urlsafe() # Return the referenced model ID
+            return self._decode_key(obj)
 
         else:
             return json.JSONEncoder.default(self, obj)
@@ -211,7 +198,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
             response = webapp2.RequestHandler.dispatch(self)
 
         except:
-            pass
+            raise
         else:
             # Save all sessions.
             self.session_store.save_sessions(response)
@@ -464,9 +451,17 @@ class BaseRESTHandler(webapp2.RequestHandler):
 
     def _value_to_property(self, value, prop):
         """Converts raw data value into an appropriate NDB property"""
-
         if isinstance(prop, ndb.KeyProperty):
-            return ndb.Key(urlsafe=value) # TODO: this will fail if given an ID that was not generated with urlsafe
+            if value is None:
+                return None
+            try:
+                return ndb.Key(urlsafe=value)
+            except ProtocolBufferDecodeError as e:
+                if prop._kind is not None:
+                    model_class = ndb.Model._kind_map.get(prop._kind)
+                    if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'allow_id', False):
+                        return ndb.Key(model_class, value)
+            raise RESTException('invalid key: {}'.format(value) )
         elif isinstance(prop, ndb.DateTimeProperty) or isinstance(prop, ndb.TimeProperty) or isinstance(prop, ndb.DateProperty):
             # TODO - use built-in datetime if dateutil is not found
             return dateutil.parser.parse(value)
