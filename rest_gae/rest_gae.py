@@ -49,6 +49,9 @@ class NDBEncoder(json.JSONEncoder):
         elif isinstance(obj, ndb.Key):
             return obj.urlsafe() # Return the referenced model ID
 
+        elif isinstance(obj, ndb.GeoPt):
+            return str(obj)
+
         else:
             return json.JSONEncoder.default(self, obj)
 
@@ -478,6 +481,9 @@ class BaseRESTHandler(webapp2.RequestHandler):
         elif isinstance(prop, ndb.StructuredProperty):
             # It's a structured property - the input data is a dict - recursively parse it as well
             return self._build_model_from_data(value, prop._modelclass)
+        elif isinstance(prop, ndb.GeoPtProperty):
+            # Convert from string (formatted as '52.37, 4.88') to GeoPt
+            return ndb.GeoPt(value)
         else:
             # Return as-is (no need for further manipulation)
             return value
