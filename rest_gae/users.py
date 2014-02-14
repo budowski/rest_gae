@@ -34,7 +34,7 @@ def get_user_rest_class(**kwd):
         verification_failed_url = kwd.get('verification_failed_url', None)
         reset_password_url = kwd.get('reset_password_url', None)
         reset_password_email = kwd.get('reset_password_email', None)
-        password_policy_callback = [kwd.get('password_policy_callback', None)]
+        user_policy_callback = [kwd.get('user_policy_callback', None)]
         send_email_callback = [kwd.get('send_email_callback', None)] # Wrapping in a list so the function won't be turned into a bound method
         allow_login_for_non_verified_email = kwd.get('allow_login_for_non_verified_email', True)
 
@@ -288,6 +288,9 @@ def get_user_rest_class(**kwd):
             try:
                 # Any exceptions raised due to invalid/missing input will be caught
 
+                if self.user_policy_callback is not None:
+                    json_data = self.user_policy_callback[0](json_data)
+
                 if not 'email' in json_data:
                     raise ValueError('Missing email')
                 if not self.email_as_username and not 'user_name' in json_data:
@@ -297,9 +300,6 @@ def get_user_rest_class(**kwd):
 
                 user_name = json_data['email'] if self.email_as_username else json_data['user_name']
                 password = json_data['password']
-
-                if self.password_policy_callback is not None:
-                    self.password_policy_callback[0](password)
 
                 # Sanitize the input
                 json_data.pop('user_name', None)
@@ -412,6 +412,9 @@ def get_user_rest_class(**kwd):
             # Update the user
             try:
                 # Any exceptions raised due to invalid/missing input will be caught
+
+                if self.user_policy_callback is not None:
+                    self.user_policy_callback[0](json_data)
                 model = self._build_model_from_data(json_data, self.model, model)
                 if self.user.is_admin:
                     # Allow the admin to change sensitive properties
@@ -422,8 +425,6 @@ def get_user_rest_class(**kwd):
 
                 if json_data.has_key('password'):
                     # Change password if requested
-                    if self.password_policy_callback is not None:
-                        self.password_policy_callback[0](json_data['password'])
                     model.set_password(json_data['password'])
 
                 if json_data.has_key('signup_token'):
