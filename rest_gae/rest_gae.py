@@ -16,6 +16,7 @@ from google.appengine.ext.ndb import Cursor
 from google.appengine.ext.db import BadValueError, BadRequestError
 from webapp2_extras import auth
 from webapp2_extras import sessions
+from webapp2_extras.routes import NamePrefixRoute
 
 
 # The REST permissions
@@ -828,7 +829,7 @@ def get_rest_class(ndb_model, **kwd):
     return RESTHandlerClass
 
 
-class RESTHandler(webapp2.Route):
+class RESTHandler(NamePrefixRoute): # We inherit from NamePrefixRoute so the same router can actually return several routes simultaneously (used for BlobKeyProperty)
     """Returns our RequestHandler with the appropriate permissions and model. Should be used as part of the WSGIApplication routing:
             app = webapp2.WSGIApplication([('/mymodel', RESTHandler(
                                                 MyModel,
@@ -843,7 +844,18 @@ class RESTHandler(webapp2.Route):
 
     def __init__(self, url, model, **kwd):
 
-        # Make sure we catch both URLs: to '/mymodel' and to '/mymodel/123'
-        super(RESTHandler, self).__init__(url.rstrip(' /') + '<model_id:(/.+)?|/>', get_rest_class(model, **kwd))
+        url = url.rstrip(' /')
+        base_url, postfix = url.rstrip(' /').rsplit('/', 1)
+        if not base_url:
+            base_url = '/'
+
+
+        super(RESTHandler, self).__init__(
+                'rest-handler-',
+                [
+                    # Make sure we catch both URLs: to '/mymodel' and to '/mymodel/123'
+                    webapp2.Route('%s<model_id:(/.+)?|/>' % url, get_rest_class(model, **kwd), 'main'),
+                ]
+            )
 
 
