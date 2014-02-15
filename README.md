@@ -279,6 +279,9 @@ When calling `GET /api/my_model` it'll return the following:
 * `download_url` - The URL you can GET in order to download the blob - This should be used as any other blob in GAE (see [here](https://developers.google.com/appengine/docs/python/tools/webapp/blobstorehandlers#BlobstoreDownloadHandler)) - a GET with optional byte-range header. If the blob property has no value set - this will be `null`.
 
 
+**Note**: Blobs will be deleted when the model pointing to them is deleted and also when a new blob is uploaded (old blob is overwritten).
+
+
 #### Specifying a String ID for Models
 
 In case you want the user to specify the ID of the model instance (instead of using the default GAE key format - e.g. *ahFkZXZ-cmVzdGdhZXNhbXBsZXIUCxIHTXlNb2RlbBiAgICAgICgCAw*), you can use the following:
