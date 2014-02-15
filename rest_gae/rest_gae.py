@@ -728,6 +728,10 @@ def get_rest_class(ndb_model, base_url, **kwd):
 
                 blob_info = upload_files[0]
 
+                if getattr(model, property_name):
+                    # The property already has a previous value - delete the older blob
+                    blobstore.delete(getattr(model, property_name))
+
                 # Set the blob reference
                 setattr(model, property_name, blob_info.key())
                 model.put()
@@ -845,6 +849,19 @@ def get_rest_class(ndb_model, base_url, **kwd):
             # Return the updated model instance
             return model
 
+
+        def _delete_model_blobs(self, model):
+            """Deletes all blobs associated with the model (finds all BlobKeyProperty)"""
+
+            for (name, prop) in model._properties.iteritems():
+                if not isinstance(prop, ndb.BlobKeyProperty):
+                    continue
+
+                if getattr(model, name):
+                    blobstore.delete(getattr(model, name))
+
+
+
         @rest_method_wrapper
         def delete(self, model, property_name=None):
             """DELETE endpoint - deletes an existing model instance"""
@@ -873,7 +890,8 @@ def get_rest_class(ndb_model, base_url, **kwd):
                             for m in results:
                                 # Do some processing before deleting the model
                                 self.delete_callback(m)
-                                # Delete the current model
+                                # Delete the current model (and its blobs)
+                                self._delete_model_blobs(m)
                                 m.key.delete()
 
                                 deleted_models.append(m)
@@ -897,6 +915,7 @@ def get_rest_class(ndb_model, base_url, **kwd):
                     # Do some processing before deleting the model
                     self.delete_callback(model)
 
+                self._delete_model_blobs(model)
                 model.key.delete()
             except Exception, exc:
                 raise RESTException('Could not delete model - %s' % exc)
