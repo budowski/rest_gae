@@ -90,6 +90,7 @@ app = webapp2.WSGIApplication([
 * Can customize the built-in user class with additional properties
 * Email verification (sends emails using GAE's email services or any other 3rd-party service)
 * Password reset (by sending emails)
+* Password policy enforcement
 
 ## Installation
 
@@ -314,7 +315,8 @@ app = webapp2.WSGIApplication([
             'body_html': 'Hello {{ user.name }}, click <a href="{{ verification_url }}">here</a>'
         },
         send_email_callback=my_send_email,
-        allow_login_for_non_verified_email=False
+        allow_login_for_non_verified_email=False,
+        user_policy_callback=lambda user, data: if len(data['pasword']): raise ValueError('Password too short')
    )], config=config)
 ```
 
@@ -347,6 +349,7 @@ The email is sent using GAE email services (see `send_email_callback` for using 
 * `reset_password_email` - (optional) Must be set if `verify_email_address` is True. A dict containing the details of the reset password email being sent: Contains the same details as the `verification_email` dict.
 * `send_email_callback` - (optional) If set, we'll use this function for sending out the emails for email verification / password reset (instead of using GAE's email services). The function receives a single dict argument - containing sender, subject, body_text, body_html. *Note*: The body_text + body_html values are already rendered as templates (meaning, the verification URLs are already embedded inside them).
 * `allow_login_for_non_verified_email` - (optional; default=True) If set to False, any user with a non-verified email address will not be able to login (will get an access denied error).
+* `user_policy_callback` - (optional; default=None) If used, this will be called every time a user registers or updates his information (including password changing). The function receives two arguments: The user model instance; the input JSON data dict. In case of invalid input (e.g. password too short, email domain not allowed, ...) - you need to raise an exception with a description of why the validation failed.
 
 
 #### Extending the User Class
