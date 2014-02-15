@@ -48,9 +48,8 @@ class NDBEncoder(json.JSONEncoder):
             # Each BlobKeyProperty is represented as a dict of upload_url/download_url
             for (name, prop) in obj._properties.iteritems():
                 if isinstance(prop, ndb.BlobKeyProperty):
-                    # TODO: support for allow_id in the future
                     server_host = app_identity.get_default_version_hostname()
-                    blob_property_url = 'http://%s%s/%s/%s' % (server_host, obj.RESTMeta.base_url, obj.key.urlsafe(), name) # e.g. /api/my_model/<SOME_KEY>/blob_prop
+                    blob_property_url = 'http://%s%s/%s/%s' % (server_host, obj.RESTMeta.base_url, self._decode_key(obj.key), name) # e.g. /api/my_model/<SOME_KEY>/blob_prop
                     obj_dict[name] = {
                             'upload_url': blob_property_url,
                             'download_url': blob_property_url if getattr(obj, name) else None # Display as null if the blob property is not set
