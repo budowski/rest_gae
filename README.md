@@ -79,6 +79,7 @@ app = webapp2.WSGIApplication([
 * Property name customization (e.g. "myprop" will be shown as "my_fancy_prop")
 * Callback functions to be called during GET/POST/PUT/DELETE (for extra functionality/customization)
 * Support for BlobKeyProperty
+* Using custom string IDs for models
 * X-HTTP-Method-Override support
 * [CORS](https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS) support
 * Supports any webapp2 authentication compatible mechanism
