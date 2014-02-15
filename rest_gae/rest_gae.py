@@ -21,6 +21,7 @@ from webapp2_extras.routes import NamePrefixRoute
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
 from google.appengine.api import app_identity
+from google.net.proto.ProtocolBuffer import ProtocolBufferDecodeError
 
 
 # The REST permissions
@@ -33,6 +34,12 @@ PERMISSION_ADMIN = 'admin'
 
 class NDBEncoder(json.JSONEncoder):
     """JSON encoding for NDB models and properties"""
+    def _decode_key(self, key):
+            model_class = ndb.Model._kind_map.get(key.kind())
+            if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'use_input_id', False):
+                return key.string_id()
+            else:
+                return key.urlsafe()
 
     def default(self, obj):
         if isinstance(obj, ndb.Model):
@@ -56,10 +63,7 @@ class NDBEncoder(json.JSONEncoder):
             obj_dict = dict((k,v) for k,v in obj_dict.iteritems() if k in included_properties)
             # Translate the property names
             obj_dict = translate_property_names(obj_dict, obj, 'output')
-
-            obj_dict['id'] = obj.key.urlsafe() # Also include the model's ID (we use urlsafe() instead of id() since we want to save the model kind as well as its ID)
-
-
+            obj_dict['id'] = self._decode_key(obj.key)
 
             return obj_dict
 
@@ -67,7 +71,7 @@ class NDBEncoder(json.JSONEncoder):
             return obj.isoformat()
 
         elif isinstance(obj, ndb.Key):
-            return obj.urlsafe() # Return the referenced model ID
+            return self._decode_key(obj)
 
         elif isinstance(obj, ndb.GeoPt):
             return str(obj)
@@ -159,6 +163,8 @@ def get_included_properties(model, input_type):
     # Add some default excluded properties
     if input_type == 'input':
         excluded_properties.update(set(BaseRESTHandler.DEFAULT_EXCLUDED_INPUT_PROPERTIES))
+        if meta_class and getattr(meta_class, 'use_input_id', False):
+            included_properties.update(['id'])
     if input_type == 'output':
         excluded_properties.update(set(BaseRESTHandler.DEFAULT_EXCLUDED_OUTPUT_PROPERTIES))
 
@@ -192,7 +198,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
     DEFAULT_MAX_QUERY_RESULTS = 1000
 
     # The names of properties that should be excluded from input/output
-    DEFAULT_EXCLUDED_INPUT_PROPERTIES = [ 'id', 'class_' ] # 'class_' is a PolyModel attribute
+    DEFAULT_EXCLUDED_INPUT_PROPERTIES = [ 'class_' ] # 'class_' is a PolyModel attribute
     DEFAULT_EXCLUDED_OUTPUT_PROPERTIES = [ ]
 
 
@@ -345,7 +351,10 @@ class BaseRESTHandler(webapp2.RequestHandler):
             return None
 
         try:
-            model = ndb.Key(urlsafe=model_id).get()
+            if getattr(self.model, 'RESTMeta', None) and getattr(self.model.RESTMeta, 'use_input_id', False):
+                model = ndb.Key(self.model, model_id).get()
+            else:
+                model = ndb.Key(urlsafe=model_id).get()
             if not model: raise Exception()
         except Exception, exc:
             # Invalid key name
@@ -475,6 +484,11 @@ class BaseRESTHandler(webapp2.RequestHandler):
             else:
                 input_properties[name] = self._value_to_property(data[name], prop)
 
+        if not model and getattr(cls, 'RESTMeta', None) and getattr(cls.RESTMeta, 'use_input_id', False):
+            if 'id' not in data:
+                raise RESTException('id field is required')
+            input_properties['id'] = data['id']
+
         # Filter the input properties
         included_properties = get_included_properties(cls, 'input')
         input_properties = dict((k,v) for k,v in input_properties.iteritems() if k in included_properties)
@@ -498,9 +512,17 @@ class BaseRESTHandler(webapp2.RequestHandler):
 
     def _value_to_property(self, value, prop):
         """Converts raw data value into an appropriate NDB property"""
-
         if isinstance(prop, ndb.KeyProperty):
-            return ndb.Key(urlsafe=value)
+            if value is None:
+                return None
+            try:
+                return ndb.Key(urlsafe=value)
+            except ProtocolBufferDecodeError as e:
+                if prop._kind is not None:
+                    model_class = ndb.Model._kind_map.get(prop._kind)
+                    if getattr(model_class, 'RESTMeta', None) and getattr(model_class.RESTMeta, 'use_input_id', False):
+                        return ndb.Key(model_class, value)
+            raise RESTException('invalid key: {}'.format(value) )
         elif isinstance(prop, ndb.TimeProperty):
             return dateutil.parser.parse(value).time()
         elif  isinstance(prop, ndb.DateProperty):
