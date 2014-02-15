@@ -195,6 +195,9 @@ class MyUser(webapp2_extras.appengine.models.User):
         admin_property = 'is_admin'
 ```
 
+
+**Note**: If you choose to use the built-in `UserRESTHandler` for user management, there is no need to specify `admin_property` (since it uses the `rest_gae.users.User` model, which already includes this definition).
+
 #### Using PERMISSION_OWNER_USER
 
 If using `PERMISSION_OWNER_USER`, the model class MUST include a RESTMeta class with a `user_owner_property` defined. That property will be used in two cases:
