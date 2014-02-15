@@ -345,7 +345,7 @@ app = webapp2.WSGIApplication([
         },
         send_email_callback=my_send_email,
         allow_login_for_non_verified_email=False,
-        user_policy_callback=lambda user, data: if len(data['pasword']) < 8: raise ValueError('Password too short')
+        user_policy_callback=lambda user, data: if len(data['password']) < 8: raise ValueError('Password too short')
    )], config=config)
 ```
 
