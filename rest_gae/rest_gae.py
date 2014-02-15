@@ -7,6 +7,7 @@ Some code is taken from: https://github.com/abahgat/webapp2-user-accounts
 import importlib
 import json
 import re
+from urlparse import urlparse
 from datetime import datetime, time, date
 from urllib import urlencode
 import webapp2
@@ -17,6 +18,9 @@ from google.appengine.ext.db import BadValueError, BadRequestError
 from webapp2_extras import auth
 from webapp2_extras import sessions
 from webapp2_extras.routes import NamePrefixRoute
+from google.appengine.ext import blobstore
+from google.appengine.ext.webapp import blobstore_handlers
+from google.appengine.api import app_identity
 
 
 # The REST permissions
@@ -34,6 +38,19 @@ class NDBEncoder(json.JSONEncoder):
         if isinstance(obj, ndb.Model):
             obj_dict = obj.to_dict()
 
+            # Each BlobKeyProperty is represented as a dict of upload_url/download_url
+            for (name, prop) in obj._properties.iteritems():
+                if isinstance(prop, ndb.BlobKeyProperty):
+                    # TODO: support for allow_id in the future
+                    server_host = app_identity.get_default_version_hostname()
+                    blob_property_url = 'http://%s%s/%s/%s' % (server_host, obj.RESTMeta.base_url, obj.key.urlsafe(), name) # e.g. /api/my_model/<SOME_KEY>/blob_prop
+                    obj_dict[name] = {
+                            'upload_url': blob_property_url,
+                            'download_url': blob_property_url if getattr(obj, name) else None # Display as null if the blob property is not set
+                            }
+
+
+
             # Filter the properties that will be returned to user
             included_properties = get_included_properties(obj, 'output')
             obj_dict = dict((k,v) for k,v in obj_dict.iteritems() if k in included_properties)
@@ -41,6 +58,8 @@ class NDBEncoder(json.JSONEncoder):
             obj_dict = translate_property_names(obj_dict, obj, 'output')
 
             obj_dict['id'] = obj.key.urlsafe() # Also include the model's ID (we use urlsafe() instead of id() since we want to save the model kind as well as its ID)
+
+
 
             return obj_dict
 
@@ -58,6 +77,12 @@ class NDBEncoder(json.JSONEncoder):
 
 class RESTException(Exception):
     """REST methods exception"""
+    pass
+
+
+class NoResponseResult(object):
+    """A class representing a non-response - used by rest_method_wrapper to detect when we shouldn't print any data with response.write.
+    Used when serving blobs (for BlobKeyProperty)"""
     pass
 
 
@@ -207,7 +232,7 @@ class BaseRESTHandler(webapp2.RequestHandler):
             response = webapp2.RequestHandler.dispatch(self)
 
         except:
-            pass
+            raise
         else:
             # Save all sessions.
             self.session_store.save_sessions(response)
@@ -303,8 +328,8 @@ class BaseRESTHandler(webapp2.RequestHandler):
     def unauthorized(self):
         return self.get_response(401, {})
 
-    def redirect(self, url):
-        return webapp2.redirect(url)
+    def redirect(self, url, **kwd):
+        return webapp2.redirect(url, **kwd)
 
 
 
@@ -495,12 +520,18 @@ class BaseRESTHandler(webapp2.RequestHandler):
 
 
 
-def get_rest_class(ndb_model, **kwd):
+def get_rest_class(ndb_model, base_url, **kwd):
     """Returns a RESTHandlerClass with the ndb_model and permissions set according to input"""
 
-    class RESTHandlerClass(BaseRESTHandler):
+    class RESTHandlerClass(BaseRESTHandler, blobstore_handlers.BlobstoreUploadHandler, blobstore_handlers.BlobstoreDownloadHandler):
 
         model = import_class(ndb_model)
+        # Save the base API URL for the model (used for BlobKeyProperty)
+        if not hasattr(model, 'RESTMeta'):
+            class NewRESTMeta: pass
+            model.RESTMeta = NewRESTMeta
+        model.RESTMeta.base_url = base_url
+
         permissions = { 'OPTIONS': PERMISSION_ANYONE }
         permissions.update(kwd.get('permissions', {}))
         allow_http_method_override = kwd.get('allow_http_method_override', True)
@@ -521,6 +552,8 @@ def get_rest_class(ndb_model, **kwd):
 
         def __init__(self, request, response):
             self.initialize(request, response)
+            blobstore_handlers.BlobstoreUploadHandler.__init__(self, request, response)
+            blobstore_handlers.BlobstoreDownloadHandler.__init__(self, request, response)
 
             self.get_callback = self.get_callback[0]
             self.post_callback = self.post_callback[0]
@@ -531,7 +564,7 @@ def get_rest_class(ndb_model, **kwd):
         def rest_method_wrapper(func):
             """Wraps GET/POST/PUT/DELETE methods and adds standard functionality"""
 
-            def inner_f(self, model_id):
+            def inner_f(self, model_id, property_name=None):
                 # See if method type is supported
                 method_name = func.func_name.upper()
                 if method_name not in self.permissions:
@@ -551,17 +584,26 @@ def get_rest_class(ndb_model, **kwd):
                 try:
                     # Call original method
                     if model_id:
-                        model = self._model_id_to_model(model_id[1:]) # Get rid of '/' at the beginning
+                        model = self._model_id_to_model(model_id.lstrip('/')) # Get rid of '/' at the beginning
 
                         if (permission == PERMISSION_OWNER_USER) and (self.get_model_owner(model) != self.user.key):
                             # The currently logged-in user is not the owner of the model
                             return self.permission_denied()
 
-                        result = func(self, model)
-                    else:
-                        result = func(self, None)
+                        if property_name and model:
+                            # Get the original name of the property
+                            property_name = translate_property_names({ property_name: True }, model, 'input').keys()[0]
 
-                    return self.success(result)
+                        result = func(self, model, property_name)
+                    else:
+                        result = func(self, None, None)
+
+                    if isinstance(result, webapp2.Response):
+                        # webapp2.Response instance - no need for further manipulation (return as-is)
+                        return result
+                    elif not isinstance(result, NoResponseResult):
+                        # Only return a result (i.e. write to the response object) if it's not a NoResponseResult (used when serving blobs - BlobKeyProperty)
+                        return self.success(result)
 
                 except RESTException, exc:
                     return self.error(exc)
@@ -576,13 +618,13 @@ def get_rest_class(ndb_model, **kwd):
 
 
         @rest_method_wrapper
-        def options(self, model):
+        def options(self, model, property_name=None):
             """OPTIONS endpoint - doesn't return anything (only returns options in the HTTP response headers)"""
             return ''
 
 
         @rest_method_wrapper
-        def get(self, model):
+        def get(self, model, property_name=None):
             """GET endpoint - retrieves a single model instance (by ID) or a list of model instances by query"""
 
             if not model:
@@ -607,6 +649,26 @@ def get_rest_class(ndb_model, **kwd):
                     }
 
             else:
+
+                if property_name:
+                    # Return a specific property value - currently supported only for BlobKeyProperty
+                    if not hasattr(model, property_name):
+                        raise RESTException('Invalid property name "%s"' % property_name)
+
+                    blob_key = getattr(model, property_name)
+
+                    if not blob_key:
+                        raise RESTException('"%s" is not set' % property_name)
+                    if not isinstance(blob_key, blobstore.BlobKey):
+                        raise RESTException('"%s" is not a BlobKeyProperty' % property_name)
+
+                    # Send the blob contents
+                    self.send_blob(blob_key)
+
+                    # Make sure we don't return a value (i.e. not write to self.response) - so self.send_blob will work properly
+                    return NoResponseResult()
+
+
                 # Return a single item (query by ID)
 
                 if self.get_callback:
@@ -617,12 +679,41 @@ def get_rest_class(ndb_model, **kwd):
 
 
         @rest_method_wrapper
-        def post(self, model):
+        def post(self, model, property_name=None):
             """POST endpoint - adds a new model instance"""
 
-            if model:
+            if model and not property_name:
                 # Invalid usage of the endpoint
                 raise RESTException('Cannot POST to a specific model ID')
+
+            if model and property_name:
+                # POST to a BlobKeyProperty
+                if not hasattr(model, property_name):
+                    raise RESTException('Invalid property name "%s"' % property_name)
+                if not isinstance(model._properties[property_name], ndb.BlobKeyProperty):
+                    raise RESTException('"%s" is not a BlobKeyProperty' % property_name)
+
+                # Next, get the created blob
+                upload_files = self.get_uploads()
+
+                if not upload_files:
+                    # No upload data - this happens when the user POSTS for the first time - we need to create an upload URL and redirect
+                    # the user to it (the BlobstoreUploadHandler will handle self.get_uploads() for us and we'll get to the same point).
+                    # We do it this way and not simply refer the user directly to create_upload_url, so we won't call create_upload_url
+                    # every time the user GETs to /my_model - since each create_upload_url call creates more DB garbage.
+                    upload_url = blobstore.create_upload_url(self.request.url)
+                    return self.redirect(upload_url, code=307) # We use a 307 redirect in order to tell the client (e.g. browser) to use the same method type (POST) and keep its POST data
+
+                blob_info = upload_files[0]
+
+                # Set the blob reference
+                setattr(model, property_name, blob_info.key())
+                model.put()
+
+                # Everything was OK
+                return { 'status': True }
+
+
 
             try:
                 # Parse POST data as JSON
@@ -639,6 +730,7 @@ def get_rest_class(ndb_model, **kwd):
                     model = self.post_callback(model, json_data)
 
                 model.put()
+
             except Exception, exc:
                 raise RESTException('Invalid JSON POST data - %s' % exc)
 
@@ -688,7 +780,7 @@ def get_rest_class(ndb_model, **kwd):
 
 
         @rest_method_wrapper
-        def put(self, model):
+        def put(self, model, property_name=None):
             """PUT endpoint - updates an existing model instance"""
 
             try:
@@ -732,7 +824,7 @@ def get_rest_class(ndb_model, **kwd):
             return model
 
         @rest_method_wrapper
-        def delete(self, model):
+        def delete(self, model, property_name=None):
             """DELETE endpoint - deletes an existing model instance"""
 
             if not model:
@@ -846,12 +938,31 @@ class RESTHandler(NamePrefixRoute): # We inherit from NamePrefixRoute so the sam
 
         url = url.rstrip(' /')
 
-        super(RESTHandler, self).__init__(
-                'rest-handler-',
-                [
-                    # Make sure we catch both URLs: to '/mymodel' and to '/mymodel/123'
-                    webapp2.Route('%s<model_id:(/.+)?|/>' % url, get_rest_class(model, **kwd), 'main'),
-                ]
-            )
+        if not url.startswith('/'):
+            raise ValueError('RESHandler url should start with "/": %s' % url)
+
+        routes = [
+                # Make sure we catch both URLs: to '/mymodel' and to '/mymodel/123'
+                webapp2.Route(url + '<model_id:(/.+)?|/>', get_rest_class(model, url, **kwd), 'main')
+            ]
+
+
+        included_properties = get_included_properties(model, 'input')
+        translation_table = get_translation_table(model, 'input')
+
+        # Build extra routes for each BlobKeyProperty
+        for (name, prop) in model._properties.iteritems():
+            if isinstance(prop, ndb.BlobKeyProperty) and name in included_properties:
+                # Register a route for the current BlobKeyProperty
+
+                property_name = translation_table.get(name, name)
+                blob_property_url = '%s/<model_id:.+?>/<property_name:%s>' % (url, property_name) # e.g. /api/my_model/<SOME_KEY>/blob_prop
+
+                # Upload/Download blob route and handler
+                routes.insert(0, webapp2.Route(blob_property_url, get_rest_class(model, url, **kwd), 'upload-download-blob'))
+
+
+
+        super(RESTHandler, self).__init__('rest-handler-', routes)
 
 

@@ -78,6 +78,7 @@ app = webapp2.WSGIApplication([
 * Set which model properties should be included/excluded for REST endpoints
 * Property name customization (e.g. "myprop" will be shown as "my_fancy_prop")
 * Callback functions to be called during GET/POST/PUT/DELETE (for extra functionality/customization)
+* Support for BlobKeyProperty
 * X-HTTP-Method-Override support
 * [CORS](https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS) support
 * Supports any webapp2 authentication compatible mechanism
@@ -246,6 +247,33 @@ class MyModel(ndb.Model):
         translate_property_names = { ... }
 ```
 
+#### Using BlobKeyProperty
+
+In case your model uses a `BlobKeyProperty`, it can be read/written as following:
+```python
+class MyModel(ndb.Model):
+    prop1 = ndb.StringProperty()
+    blob_prop = ndb.BlobKeyProperty()
+```
+
+When calling `GET /api/my_model` it'll return the following:
+```json
+{ "results": [
+    {
+        "id": "ahFkZXZ-cmVzdGdhZXNhbXBsZXIUCxIHTXlNb2RlbBiAgICAgICgCAw",
+        "prop1": "some value",
+        "blob_prop": {
+            "upload_url": "http://myapp.com/api/my_model/ahFkZXZ-cmVzdGdhZXNhbXBsZXIUCxIHTXlNb2RlbBiAgICAgICgCAw/blob_prop",
+            "download_url": "http://myapp.com/api/my_model/ahFkZXZ-cmVzdGdhZXNhbXBsZXIUCxIHTXlNb2RlbBiAgICAgICgCAw/blob_prop"
+        }
+    }
+    ...
+]
+}
+```
+
+* `upload_url` - The URL to be used for uploading the blob data. This should be used as any other blob in GAE (see [here](https://developers.google.com/appengine/docs/python/tools/webapp/blobstorehandlers#BlobstoreUploadHandler)) - a POST with a "multipart/form-data" enctype.
+* `download_url` - The URL you can GET in order to download the blob - This should be used as any other blob in GAE (see [here](https://developers.google.com/appengine/docs/python/tools/webapp/blobstorehandlers#BlobstoreDownloadHandler)) - a GET with optional byte-range header. If the blob property has no value set - this will be `null`.
 
 
 ### UserRESTHandler
