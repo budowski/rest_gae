@@ -277,6 +277,33 @@ When calling `GET /api/my_model` it'll return the following:
 * `download_url` - The URL you can GET in order to download the blob - This should be used as any other blob in GAE (see [here](https://developers.google.com/appengine/docs/python/tools/webapp/blobstorehandlers#BlobstoreDownloadHandler)) - a GET with optional byte-range header. If the blob property has no value set - this will be `null`.
 
 
+#### Specifying a String ID for Models
+
+In case you want the user to specify the ID of the model instance (instead of using the default GAE key format - e.g. *ahFkZXZ-cmVzdGdhZXNhbXBsZXIUCxIHTXlNb2RlbBiAgICAgICgCAw*), you can use the following:
+```python
+class MyModel(ndb.Model):
+  property1 = ndb.StringProperty()
+  
+  class RESTMeta:
+    use_input_id = True
+````
+
+Now `POST /api/my_model` will look like this:
+```json
+{
+    "id": "my_model_id",
+    "property1": "some_val",
+    ...
+}
+```
+
+And the model-specific endpoints will look like this:
+* `GET /api/my_model/my_model_id`
+* `PUT /api/my_model/my_model_id`
+* `DELETE /api/my_model/my_model_id`
+ 
+
+
 ### UserRESTHandler
 
 Should be used as part of the WSGIApplication routing:
