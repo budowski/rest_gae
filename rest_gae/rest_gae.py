@@ -977,6 +977,7 @@ class RESTHandler(NamePrefixRoute): # We inherit from NamePrefixRoute so the sam
     def __init__(self, url, model, **kwd):
 
         url = url.rstrip(' /')
+        model = import_class(model)
 
         if not url.startswith('/'):
             raise ValueError('RESHandler url should start with "/": %s' % url)
