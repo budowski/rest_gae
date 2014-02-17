@@ -789,13 +789,13 @@ def get_rest_class(ndb_model, base_url, **kwd):
                     raise RESTException('Invalid JSON POST data - %s' % exc)
 
             if self.before_post_callback:
-                self.before_post_callback(models, json_data)
+                models = self.before_post_callback(models, json_data)
 
             # Commit all models in a transaction
             created_keys = ndb.put_multi(models)
 
             if self.after_post_callback:
-                self.after_post_callback(created_keys, models)
+                models = self.after_post_callback(created_keys, models)
 
             # Return the newly-created model instance(s)
             return models
