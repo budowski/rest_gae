@@ -22,10 +22,10 @@ from google.appengine.ext.webapp import blobstore_handlers
 from google.appengine.api import app_identity
 from google.net.proto.ProtocolBuffer import ProtocolBufferDecodeError
 
-#try:
-#    import dateutil.parser
-#except ImportError as e:
-dateutil = None
+try:
+    import dateutil.parser
+except ImportError as e:
+    dateutil = None
 
 
 # The REST permissions
