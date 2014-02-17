@@ -528,17 +528,26 @@ class BaseRESTHandler(webapp2.RequestHandler):
             raise RESTException('invalid key: {}'.format(value) )
         elif isinstance(prop, ndb.TimeProperty):
             if dateutil is None:
-                return datetime.strptime(value, "%H:%M:%S").time()
+                try:
+                    return datetime.strptime(value, "%H:%M:%S").time()
+                except ValueError as e:
+                    raise RESTException("Invalid time. Must be in ISO 8601 format.")
             else:
                 return dateutil.parser.parse(value).time()
         elif  isinstance(prop, ndb.DateProperty):
             if dateutil is None:
-                return datetime.strptime(value, "%Y-%m-%d").date()
+                try:
+                    return datetime.strptime(value, "%Y-%m-%d").date()
+                except ValueError as e:
+                    raise RESTException("Invalid date. Must be in ISO 8601 format.")
             else:
                 return dateutil.parser.parse(value).date()
         elif isinstance(prop, ndb.DateTimeProperty):
             if dateutil is None:
-                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+                try:
+                    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+                except ValueError as e:
+                    raise RESTException("Invalid datetime. Must be in ISO 8601 format.")
             else:
                 return dateutil.parser.parse(value)
         elif isinstance(prop, ndb.GeoPtProperty):
