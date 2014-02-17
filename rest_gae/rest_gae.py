@@ -11,7 +11,6 @@ from urlparse import urlparse
 from datetime import datetime, time, date
 from urllib import urlencode
 import webapp2
-import dateutil.parser
 from google.appengine.ext import ndb
 from google.appengine.ext.ndb import Cursor
 from google.appengine.ext.db import BadValueError, BadRequestError
@@ -22,6 +21,11 @@ from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
 from google.appengine.api import app_identity
 from google.net.proto.ProtocolBuffer import ProtocolBufferDecodeError
+
+try:
+    import dateutil.parser
+except ImportError as e:
+    dateutil = None
 
 
 # The REST permissions
@@ -523,11 +527,29 @@ class BaseRESTHandler(webapp2.RequestHandler):
                         return ndb.Key(model_class, value)
             raise RESTException('invalid key: {}'.format(value) )
         elif isinstance(prop, ndb.TimeProperty):
-            return dateutil.parser.parse(value).time()
+            if dateutil is None:
+                try:
+                    return datetime.strptime(value, "%H:%M:%S").time()
+                except ValueError as e:
+                    raise RESTException("Invalid time. Must be in ISO 8601 format.")
+            else:
+                return dateutil.parser.parse(value).time()
         elif  isinstance(prop, ndb.DateProperty):
-            return dateutil.parser.parse(value).date()
+            if dateutil is None:
+                try:
+                    return datetime.strptime(value, "%Y-%m-%d").date()
+                except ValueError as e:
+                    raise RESTException("Invalid date. Must be in ISO 8601 format.")
+            else:
+                return dateutil.parser.parse(value).date()
         elif isinstance(prop, ndb.DateTimeProperty):
-            return dateutil.parser.parse(value)
+            if dateutil is None:
+                try:
+                    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+                except ValueError as e:
+                    raise RESTException("Invalid datetime. Must be in ISO 8601 format.")
+            else:
+                return dateutil.parser.parse(value)
         elif isinstance(prop, ndb.GeoPtProperty):
             # Convert from string (formatted as '52.37, 4.88') to GeoPt
             return ndb.GeoPt(value)
