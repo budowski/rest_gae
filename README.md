@@ -98,7 +98,7 @@ app = webapp2.WSGIApplication([
 
 1. Configure webapp2 for GAE
 2. Configure [Jinja2](https://developers.google.com/appengine/docs/python/gettingstartedpython27/templates) for GAE
-3. Include [dateutil](https://pypi.python.org/pypi/python-dateutil) with your app (make sure `import dateutil` works)
+3. Include [dateutil](https://pypi.python.org/pypi/python-dateutil) with your app (make sure `import dateutil` works) - this is *optional* (will use `datetime.strptime` otherwise) - if not used, the library will be less tolerant to input date string parsing
 4. Drop-in the rest_gae folder
 
 ## Documentation
