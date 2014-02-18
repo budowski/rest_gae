@@ -841,7 +841,7 @@ def get_rest_class(ndb_model, base_url, **kwd):
             updated_keys = ndb.put_multi(models)
 
             if self.after_put_callback:
-                self.after_put_callback(updated_keys, models)
+                models = self.after_put_callback(updated_keys, models)
 
             return models
 
