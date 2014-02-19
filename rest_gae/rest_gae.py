@@ -581,10 +581,13 @@ def get_rest_class(ndb_model, base_url, **kwd):
         allowed_origin = kwd.get('allowed_origin', None)
 
         # Wrapping in a list so the functions won't be turned into bound methods
-        get_callback = [kwd.get('get_callback', None)]
-        post_callback = [kwd.get('post_callback', None)]
-        put_callback = [kwd.get('put_callback', None)]
-        delete_callback = [kwd.get('delete_callback', None)]
+        after_get_callback = [kwd.get('after_get_callback', None)]
+        before_post_callback = [kwd.get('before_post_callback', None)]
+        after_post_callback = [kwd.get('after_post_callback', None)]
+        before_put_callback = [kwd.get('before_put_callback', None)]
+        after_put_callback = [kwd.get('after_put_callback', None)]
+        before_delete_callback = [kwd.get('before_delete_callback', None)]
+        after_delete_callback = [kwd.get('after_delete_callback', None)]
 
         # Validate arguments (we do this at this stage in order to raise exceptions immediately rather than while the app is running)
         if PERMISSION_OWNER_USER in permissions.values():
@@ -598,10 +601,13 @@ def get_rest_class(ndb_model, base_url, **kwd):
             blobstore_handlers.BlobstoreUploadHandler.__init__(self, request, response)
             blobstore_handlers.BlobstoreDownloadHandler.__init__(self, request, response)
 
-            self.get_callback = self.get_callback[0]
-            self.post_callback = self.post_callback[0]
-            self.put_callback = self.put_callback[0]
-            self.delete_callback = self.delete_callback[0]
+            self.after_get_callback = self.after_get_callback[0]
+            self.before_post_callback = self.before_post_callback[0]
+            self.after_post_callback = self.after_post_callback[0]
+            self.before_put_callback = self.before_put_callback[0]
+            self.after_put_callback = self.after_put_callback[0]
+            self.before_delete_callback = self.before_delete_callback[0]
+            self.after_delete_callback = self.after_delete_callback[0]
 
 
         def rest_method_wrapper(func):
@@ -682,9 +688,9 @@ def get_rest_class(ndb_model, base_url, **kwd):
                 query = self._order_query(query) # Order the results
                 (results, cursor) = self._fetch_query(query) # Fetch them (with a limit / specific page, if provided)
 
-                if self.get_callback:
+                if self.after_get_callback:
                     # Additional processing required
-                    results = self.get_callback(results)
+                    results = self.after_get_callback(results)
 
                 return {
                     'results': results,
@@ -714,9 +720,9 @@ def get_rest_class(ndb_model, base_url, **kwd):
 
                 # Return a single item (query by ID)
 
-                if self.get_callback:
+                if self.after_get_callback:
                     # Additional processing required
-                    model = self.get_callback(model)
+                    model = self.after_get_callback(model)
 
                 return model
 
@@ -765,129 +771,99 @@ def get_rest_class(ndb_model, base_url, **kwd):
             try:
                 # Parse POST data as JSON
                 json_data = json.loads(self.request.body)
-            except ValueError, exc:
+            except ValueError as exc:
                 raise RESTException('Invalid JSON POST data')
 
-            try:
-                # Any exceptions raised due to invalid/missing input will be caught
-                model = self._build_model_from_data(json_data, self.model)
+            if not isinstance(json_data, list):
+                json_data = [json_data]
 
-                if self.post_callback:
-                    # Do some processing before saving the model
-                    model = self.post_callback(model, json_data)
+            models = []
 
-                model.put()
-
-            except Exception, exc:
-                raise RESTException('Invalid JSON POST data - %s' % exc)
-
-
-            # Return the newly-created model instance
-            return model
-
-
-        @ndb.transactional(
-                retries=0, # Don't re-try if we fail
-                xg=True # We might touch several entity types during this process (in case of StructuredProperty)
-                )
-        def _multi_update_models(self, models):
-            """Does updates for several models at once (each model is raw JSON data). It's a transactional method so if we fail for one model, we'll rollback all other changes."""
-
-            permission = self.permissions['PUT']
-
-            updated_models = []
-
-            for model_to_update in models:
-                if 'id' not in model_to_update: raise RESTException('Missing "id" argument for model')
-
-                model_id = model_to_update['id']
-                model = self._model_id_to_model(model_id) # Any exceptions raised here will be caught by calling function
-
-                if (permission == PERMISSION_OWNER_USER) and (self.get_model_owner(model) != self.user.key):
-                    # The currently logged-in user is not the owner of the model
-                    raise RESTException('Model id %s is not owned by user' % model_id)
-
-                # Update the current model
+            for model_to_create in json_data:
                 try:
                     # Any exceptions raised due to invalid/missing input will be caught
-                    model = self._build_model_from_data(model_to_update, self.model, model)
+                    model = self._build_model_from_data(model_to_create, self.model)
+                    models.append(model)
 
-                    if self.put_callback:
-                        # Do some processing before updating the model
-                        model = self.put_callback(model, model_to_update)
+                except Exception as exc:
+                    raise RESTException('Invalid JSON POST data - %s' % exc)
 
-                    model.put()
+            if self.before_post_callback:
+                models = self.before_post_callback(models, json_data)
 
-                    updated_models.append(model)
-                except Exception, exc:
-                    raise RESTException('Invalid JSON PUT data - %s' % exc)
+            # Commit all models in a transaction
+            created_keys = ndb.put_multi(models)
 
+            if self.after_post_callback:
+                models = self.after_post_callback(created_keys, models)
 
-            return updated_models
+            # Return the newly-created model instance(s)
+            return models
 
 
         @rest_method_wrapper
         def put(self, model, property_name=None):
             """PUT endpoint - updates an existing model instance"""
+            models = []
 
             try:
                 # Parse PUT data as JSON
                 json_data = json.loads(self.request.body)
-            except ValueError, exc:
+            except ValueError as exc:
                 raise RESTException('Invalid JSON PUT data')
 
-
-            if not model:
+            if model:
+                # Update just one model
+                model = self._build_model_from_data(json_data, self.model, model)
+                json_data = [json_data]
+                models.append(model)
+            else:
                 # Update several models at once
 
                 if not isinstance(json_data, list):
                     raise RESTException('Invalid JSON PUT data')
 
-                # Any exception raised here will be caught by calling function
-                updated_models = self._multi_update_models(json_data)
+                for model_to_update in json_data:
 
-                return updated_models
+                    model_id = model_to_update.pop('id', None)
 
+                    if model_id is None:
+                        raise RESTException('Missing "id" argument for model')
 
+                    model = self._model_id_to_model(model_id)
+                    model = self._build_model_from_data(model_to_update, self.model, model)
+                    models.append(model)
 
-            #
-            # Update a single model instance
-            #
+            if self.before_put_callback:
+                models = self.before_put_callback(models, json_data)
 
-            try:
-                # Any exceptions raised due to invalid/missing input will be caught
-                model = self._build_model_from_data(json_data, self.model, model)
+            # Commit all models in a transaction
+            updated_keys = ndb.put_multi(models)
 
-                if self.put_callback:
-                    # Do some processing before updating the model
-                    model = self.put_callback(model, json_data)
+            if self.after_put_callback:
+                models = self.after_put_callback(updated_keys, models)
 
-                model.put()
-            except Exception, exc:
-                raise RESTException('Invalid JSON PUT data - %s' % exc)
-
-
-            # Return the updated model instance
-            return model
+            return models
 
 
         def _delete_model_blobs(self, model):
             """Deletes all blobs associated with the model (finds all BlobKeyProperty)"""
 
             for (name, prop) in model._properties.iteritems():
-                if not isinstance(prop, ndb.BlobKeyProperty):
-                    continue
-
-                if getattr(model, name):
-                    blobstore.delete(getattr(model, name))
+                if isinstance(prop, ndb.BlobKeyProperty):
+                    if getattr(model, name):
+                        blobstore.delete(getattr(model, name))
 
 
 
         @rest_method_wrapper
         def delete(self, model, property_name=None):
             """DELETE endpoint - deletes an existing model instance"""
+            models = []
 
-            if not model:
+            if model:
+                models.append(model)
+            else:
                 # Delete multiple model instances
 
                 if self.permissions['DELETE'] == PERMISSION_OWNER_USER:
@@ -900,50 +876,25 @@ def get_rest_class(ndb_model, base_url, **kwd):
                 # Delete the models (we might need to fetch several pages in case of many results)
                 cursor = None
                 more_available = True
-                deleted_models = []
 
                 while more_available:
-                    (results, cursor, more_available) = query.fetch_page(BaseRESTHandler.DEFAULT_MAX_QUERY_RESULTS, start_cursor=cursor)
+                    results, cursor, more_available = query.fetch_page(BaseRESTHandler.DEFAULT_MAX_QUERY_RESULTS, start_cursor=cursor)
                     if results:
-                        if self.delete_callback:
-                            # Since we need to call a callback function before each deletion, we can't use ndb.delete_multi
+                        models.extend(results)
 
-                            for m in results:
-                                # Do some processing before deleting the model
-                                self.delete_callback(m)
-                                # Delete the current model (and its blobs)
-                                self._delete_model_blobs(m)
-                                m.key.delete()
+            if self.before_delete_callback:
+                models = self.before_delete_callback(models)
 
-                                deleted_models.append(m)
+            for m in models:
+                self._delete_model_blobs(m) # No easy way to delete blobstore entries in a transaction
 
-                        else:
-                            # Delete all models at once using ndb.delete_multi
-                            ndb.delete_multi(m.key for m in results)
-                            deleted_models += results
+            deleted_keys = ndb.delete_multi(m.key for m in models)
 
-                # Return the deleted models
-                return deleted_models
+            if self.after_delete_callback:
+                self.after_delete_callback(deleted_keys, models)
 
-
-            #
-            # Delete a single model
-            #
-
-
-            try:
-                if self.delete_callback:
-                    # Do some processing before deleting the model
-                    self.delete_callback(model)
-
-                self._delete_model_blobs(model)
-                model.key.delete()
-            except Exception, exc:
-                raise RESTException('Could not delete model - %s' % exc)
-
-
-            # Return the deleted model instance
-            return model
+            # Return the deleted models
+            return models
 
         #
         # Utility methods/properties
