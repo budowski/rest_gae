@@ -120,10 +120,6 @@ app = webapp2.WSGIApplication([
             'PUT': PERMISSION_OWNER_USER,
             'DELETE': PERMISSION_ADMIN
         },
-        get_callback=lambda model: model,
-        post_callback=lambda model, data: model,
-        put_callback=lambda model, data: model,
-        delete_callback=lambda model: model,
         allow_http_method_override=False,
         allowed_origin='*'
     )
@@ -133,7 +129,7 @@ app = webapp2.WSGIApplication([
 The `RESTHandler` adds the following REST endpoints (according to `permissions` parameter):
 * **GET /mymodel** - returns all instances of MyModel (`PERMISSION_ANYONE` - all instances; `PERMISSION_OWNER_USER` - only the ones owned by the current logged-in user). See notes below on how to use the GET endpoint for advanced querying.
 * **GET /mymodel/123** - returns information about a specific model instance (`PERMISSION_OWNER_USER` - only the owning user can view this information)
-* **POST /mymodel** - creates a new MyModel instance 
+* **POST /mymodel** - creates a new MyModel instance - supports multi-instance creation (just pass an array of models instead of a dict)
 * **PUT /mymodel/123** - updates an existing model's properties (`PERMISSION_OWNER_USER` - only the owning user can do that)
 * **PUT /mymodel** - updates several model instances at once. The entire request is transactional - If one of the model update fails, any previous updates made in the same request will be undone.
 * **DELETE /mymodel/123** - deletes a specific model (`PERMISSION_OWNER_USER` - only the owning user can do that)
@@ -149,20 +145,23 @@ Arguments the `RESTHandler` class constructor accepts:
   * `PERMISSION_LOGGED_IN_USER` - Must be a logged-in user to access this endpoint
   * `PERMISSION_OWNER_USER` - Must be the owner of the current model (used in PUT/DELETE endpoints). See notes below on how to specify the name of the Model property that marks the owning user.
   * `PERMISSION_ADMIN` - Must be an admin to access the current endpoint. See notes below on how to specify the name of the User model property that marks if a user is an admin or not.
-* `get_callback` - (optional) If set, this function will be called just before returning the results:
+* `after_get_callback` - (optional) If set, this function will be called just before returning the results:
   * In case of a GET /mymodel - the argument will be a list of model instances. The function must return a list of models, not necessarily the same as the input list (it can also be an empty list).
   * In case of a GET /mymodel/123 - the argument will be a single model instance. The function must return the model.
-* `post_callback` - (optional) If set, this function will be called right after creating the model according to the input JSON data, and right before saving it (i.e. before model.put()).
-The function receives two arguments: The model which will be saved; the raw input JSON dict (after it has gone through some pre-processing).
-The function must return the model, in order for it to be saved. If the function raises an exception, the model creation fails with an error.
-* `put_callback` - (optional) If set, this function will be called right after updating the model according to the input JSON data, and right before saving the updated model (i.e. before model.put()).
-The function receives two arguments: The model which will be saved; the raw input JSON dict (after it has gone through some pre-processing).
-The function must return the model, in order for it to be saved.
-In case of multiple updates of models, this function will be called for each single model being updated.
-If the function raises an exception, the model update fails with an error (in case of multi-update - the entire transaction fails).
-* `delete_callback` - (optional) If set, this function will be called right before deleting a model. Receives an input argument of the model to be deleted. Function return value is ignored.
-In case of multiple deletion of models, this function will be called for each single model being deleted.
-If the function raises an exception, the model deletion fails with an error (in case of multi-delete - since there is no transaction, only the current deletion will fail and all previously-successful deletions will remain the same).
+* `before_post_callback` - (optional) If set, this function will be called right after creating the model(s) according to the input JSON data, and right before saving it (i.e. before model.put()). It receives two arguments - the list of models which are going to be inserted into DB (can be one in the list); the raw input JSON dict (after it has gone through some pre-processing).
+The function must return the list of models to save. If the function raises an exception, the model creation fails with an error.
+* `after_post_callback` - (optional) If set, this function will be called right after saving the models according to the input JSON data, (i.e. after model.put()).
+The function receives two arguments: The keys of the models which were saved; the model instances which were be saved.
+The function must return the list of models to be returned as output for the endpoint.
+* `before_put_callback` - (optional) If set, this function will be called right after updating the model according to the input JSON data, and right before saving the updated model (i.e. before model.put()). The function receives two arguments: The list of models which will be saved; the raw input JSON dict (after it has gone through some pre-processing).
+The function must return the list of models, in order for them to be saved.
+If the function raises an exception, the model update fails with an error.
+* `after_put_callback` - (optional) If set, this function will be called right after updating the model(s) according to the input JSON data (i.e. after model.put()).
+The function receives two arguments: The keys of the models which were saved; the model instances which were be saved.
+The function must return the list of models to be returned as output for the endpoint.
+* `before_delete_callback` - (optional) If set, this function will be called right before deleting a model. Receives an input argument of the models to be deleted. The function returns the list of models to delete (may be an empty list).
+If the function raises an exception, the model deletion fails with an error.
+* `after_delete_callback` - (optional) If set, this function will be called right after deleting a model. Receives two input arguments of the keys of the deleted models + the models that were deleted. The function returns the list of models that will be returned as the endpoint output.
 * `allow_http_method_override` - (optional; default=True) If set, allows the user to add an HTTP request header 'X-HTTP-Method-Override' to override the request type (e.g. if the HTTP request is a POST but it also contains 'X-HTTP-Method-Override: GET', it will be treated as a GET request).
 * `allowed_origin` - (optional; default=None) If not set, CORS support is disabled. If set to '*' - allows Cross-Site HTTP requests from all domains; if set to 'http://sub.example.com' or similar - allows Cross-Site HTTP requests only from that domain. See [here](https://developer.mozilla.org/en/docs/HTTP/Access_control_CORS) for more information.
 
@@ -384,7 +383,7 @@ The email is sent using GAE email services (see `send_email_callback` for using 
 * `reset_password_email` - (optional) Must be set if `verify_email_address` is True. A dict containing the details of the reset password email being sent: Contains the same details as the `verification_email` dict.
 * `send_email_callback` - (optional) If set, we'll use this function for sending out the emails for email verification / password reset (instead of using GAE's email services). The function receives a single dict argument - containing sender, subject, body_text, body_html. *Note*: The body_text + body_html values are already rendered as templates (meaning, the verification URLs are already embedded inside them).
 * `allow_login_for_non_verified_email` - (optional; default=True) If set to False, any user with a non-verified email address will not be able to login (will get an access denied error).
-* `user_policy_callback` - (optional; default=None) If used, this will be called every time a user registers or updates his information (including password changing). The function receives two arguments: The user model instance; the input JSON data dict. In case of invalid input (e.g. password too short, email domain not allowed, ...) - you need to raise an exception with a description of why the validation failed.
+* `user_policy_callback` - (optional) If used, this will be called every time a user registers or updates his information (including password changing). The function receives two arguments: The user model instance; the input JSON data dict. In case of invalid input (e.g. password too short, email domain not allowed, ...) - you need to raise an exception with a description of why the validation failed.
 
 
 #### Extending the User Class
