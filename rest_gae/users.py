@@ -288,7 +288,7 @@ def get_user_rest_class(**kwd):
             try:
                 # Any exceptions raised due to invalid/missing input will be caught
 
-                if self.user_policy_callback is not None:
+                if self.user_policy_callback is not None and self.user_policy_callback[0] is not None:
                     json_data = self.user_policy_callback[0](self.user, json_data)
 
                 if not 'email' in json_data:
