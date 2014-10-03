@@ -459,6 +459,7 @@ def get_user_rest_class(**kwd):
 
             # Delete the user
             try:
+                self.user_model.remove_unique(model.email, ['email'], email=model.email)
                 model.key.delete()
             except Exception, exc:
                 raise RESTException('Could not delete user - %s' % exc)
@@ -596,6 +597,22 @@ class User(webapp2_extras.appengine.auth.models.User):
 
       return None, None
 
+    # Since the original create_user method calls user.put() (where the exception occurs), only *after*
+    # calling cls.unique_model.create_multi(k for k, v in uniques), this means we'll have to delete
+    # those created uniques (other they'll just stay as garbage data in the DB, while not allowing
+    # the user to re-register with the same username/email/etc.
+    @classmethod 
+    def remove_unique(cls, auth_id, unique_properties, **user_values):
+        uniques = [('%s.auth_id:%s' % (cls.__name__, auth_id), 'auth_id')]
+        print uniques
+        if unique_properties:
+            for name in unique_properties:
+                key = '%s.%s:%s' % (cls.__name__, name, user_values[name])
+                uniques.append((key, name))
+
+        # Delete the uniques
+        ndb.delete_multi(model.Key(cls.unique_model, k) for k,v in uniques)
+
 
     @classmethod
     def create_user(cls, auth_id, unique_properties=None, **user_values):
@@ -607,18 +624,7 @@ class User(webapp2_extras.appengine.auth.models.User):
             return super(User, cls).create_user(auth_id, unique_properties, **user_values)
 
         except Exception, exc:
-            # Since the original create_user method calls user.put() (where the exception occurs), only *after*
-            # calling cls.unique_model.create_multi(k for k, v in uniques), this means we'll have to delete
-            # those created uniques (other they'll just stay as garbage data in the DB, while not allowing
-            # the user to re-register with the same username/email/etc.
-            uniques = [('%s.auth_id:%s' % (cls.__name__, auth_id), 'auth_id')]
-            if unique_properties:
-                for name in unique_properties:
-                    key = '%s.%s:%s' % (cls.__name__, name, user_values[name])
-                    uniques.append((key, name))
-
-            # Delete the uniques
-            ndb.delete_multi(model.Key(cls.unique_model, k) for k,v in uniques)
+            cls.remove_unique(auth_id, unique_properties, user_values)
 
             # Continue throwing the original exception
             raise exc
