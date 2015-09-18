@@ -252,7 +252,8 @@ class BaseRESTHandler(webapp2.RequestHandler):
     @webapp2.cached_property
     def session(self):
         """Shortcut to access the current session."""
-        return self.session_store.get_session(backend="datastore")
+        backend = self.app.config.get("session_backend", "datastore")
+        return self.session_store.get_session(backend=backend)
 
 
 
